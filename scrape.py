@@ -1,6 +1,11 @@
 import scrapy, scrapy.crawler
 import re, collections
 
+delete_edges = {
+    (7047, 7045), # Scotus -> Ockham
+    (9663, 9661), # Nicephorus -> Gregory Palamas
+}
+
 class Graph:
     def __init__(self):
         self.nodes = {}
@@ -23,6 +28,7 @@ class TreeSpider(scrapy.Spider):
         self_id = response.meta['id']
         for h in response.xpath('//h1/text()'):
             name = h.extract().strip()
+            name = ' '.join(name.split())
         self.graph.nodes[self_id] = {
             'name': name,
             'url': response.url,
@@ -32,8 +38,10 @@ class TreeSpider(scrapy.Spider):
                 url = a.attrib['href']
                 if m := re.search(r'peopleinfo\.php\?pid=(\d+)$', url):
                     parent_id = m.group(1)
+                    if (int(parent_id), int(self_id)) in delete_edges:
+                        continue
                     self.graph.edges[parent_id][self_id] = {}
-                    yield scrapy.Request(url=response.urljoin(url), callback=self.parse, meta={'id': self_id})
+                    yield scrapy.Request(url=response.urljoin(url), callback=self.parse, meta={'id': parent_id})
 
 if __name__ == "__main__":
     import argparse
