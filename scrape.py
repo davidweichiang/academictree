@@ -26,21 +26,29 @@ class TreeSpider(scrapy.Spider):
 
     def parse(self, response):
         self_id = response.meta['id']
+        name = []
         for h in response.xpath('//h1/text()'):
-            name = h.extract().strip()
-            name = ' '.join(name.split())
+            name.append(h.extract())
+        name = ' '.join(name)
+        name = ' '.join(name.split())
         self.graph.nodes[self_id] = {
             'name': name,
             'url': response.url,
         }
         for div in response.xpath('//div[h4/text()="Parents"]'):
-            for a in div.xpath('.//a'):
-                url = a.attrib['href']
+            for tr in div.xpath('.//tr'):
+                tds = list(tr.xpath('.//td'))
+                if len(tds) == 0: continue
+                links = list(tds[0].xpath('.//a'))
+                if len(links) == 0: continue
+                url = links[0].attrib['href']
                 if m := re.search(r'peopleinfo\.php\?pid=(\d+)$', url):
                     parent_id = m.group(1)
                     if (int(parent_id), int(self_id)) in delete_edges:
                         continue
-                    self.graph.edges[parent_id][self_id] = {}
+                    rel = tds[1].xpath('.//text()').get()
+                    if rel in ['research assistant']: continue
+                    self.graph.edges[parent_id][self_id] = {'rel': rel}
                     yield scrapy.Request(url=response.urljoin(url), callback=self.parse, meta={'id': parent_id})
 
 if __name__ == "__main__":
@@ -64,7 +72,11 @@ if __name__ == "__main__":
             print(f'  {i} [label="{name}",URL="{url}"]', file=outfile)
         for u in g.edges:
             for v in g.edges[u]:
-                print(f'  {u} -> {v}', file=outfile)
+                label = g.edges[u][v].get('rel', '').strip()
+                if label:
+                    print(f'  {u} -> {v} [label="{label}"]', file=outfile)
+                else:
+                    print(f'  {u} -> {v}', file=outfile)
         print('}', file=outfile)
     
     
